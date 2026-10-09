@@ -32,6 +32,7 @@ button.btn.ghost{background:var(--soft);color:var(--pink)}
 .rep{font-size:12px;color:var(--mut);line-height:1.5}
 .rep b{color:var(--tx);font-size:13px}
 .rep a{color:var(--pink);font-weight:700;text-decoration:none}
+body.siren{animation:flash .6s steps(1) infinite}@keyframes flash{50%{background:#ff9fc2}}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--pink);color:var(--dark);padding:10px 16px;border-radius:99px;font-weight:700;font-size:12px;opacity:0;transition:.25s;pointer-events:none;max-width:90%;text-align:center}
 #toast.on{opacity:1}
 </style>
@@ -40,7 +41,7 @@ button.btn.ghost{background:var(--soft);color:var(--pink)}
 <main>
 <header>
   <div class="brand"><div class="logo">🌸</div>ALERTA SOS</div>
-  <span class="badge" id="state">● LISTA</span>
+  <div style="display:flex;gap:6px;align-items:center"><button class="badge" id="exitBtn" style="border:0;cursor:pointer">✕ Salir</button><span class="badge" id="state">● LISTA</span></div>
 </header>
 
 <h1>¿Necesitas ayuda? 🌸</h1>
@@ -48,6 +49,15 @@ button.btn.ghost{background:var(--soft);color:var(--pink)}
 
 <button class="big" id="callBtn"><span class="ic">📞</span><span><b>Llamar al 123</b><small>Línea de emergencias</small></span></button>
 <button class="big wa" id="waBtn"><span class="ic">💬</span><span><b>Enviar SOS por WhatsApp</b><small id="waSub">Guarda un contacto de confianza abajo</small></span></button>
+
+<div class="label">Alarma</div>
+<div class="card">
+  <h2>🔊 Alarma sonora</h2>
+  <p class="s">Sirena fuerte, vibración y pantalla intermitente para llamar la atención en lugares públicos.</p>
+  <button class="btn" id="sirenBtn">Activar alarma</button>
+  <label style="display:flex;gap:8px;align-items:center;font-weight:400;margin-top:12px"><input type="checkbox" id="autoSiren" style="width:auto"> Sonar la sirena al enviar SOS por WhatsApp</label>
+  <div class="note">Déjalo desactivado (modo silencioso) si una alarma puede ponerte en riesgo.</div>
+</div>
 
 <div class="label">Ubicación</div>
 <div class="card">
@@ -139,6 +149,7 @@ $('callBtn').onclick=async()=>{
   location.href='tel:123';
 };
 $('waBtn').onclick=async()=>{
+  if($('autoSiren').checked)startSiren();
   if(!contact)return toast('Guarda primero un contacto');
   const r=await makeReport('SOS · WhatsApp a '+contact.name);
   location.href=waLink(r);
@@ -150,6 +161,34 @@ $('saveBtn').onclick=()=>{
   contact={name,phone};store.set('sos_contact',contact);renderContact();toast('Contacto guardado');
 };
 $('clearBtn').onclick=()=>{if(confirm('¿Borrar todos los reportes?')){reports=[];store.set('sos_reports',reports);renderReports()}};
+
+let ac,osc,lfo,sirenOn=false,vibT;
+function startSiren(){
+  if(sirenOn)return;
+  try{
+    ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+    if(ac.state==='suspended')ac.resume();
+    osc=ac.createOscillator();osc.type='sawtooth';osc.frequency.value=900;
+    lfo=ac.createOscillator();lfo.frequency.value=1.6;
+    const depth=ac.createGain();depth.gain.value=350;
+    lfo.connect(depth);depth.connect(osc.frequency);
+    const vol=ac.createGain();vol.gain.value=1;
+    osc.connect(vol);vol.connect(ac.destination);
+    osc.start();lfo.start();
+  }catch(e){toast('Tu navegador no permite sonido');return}
+  sirenOn=true;
+  $('sirenBtn').textContent='⏹ Detener alarma';
+  document.body.classList.add('siren');
+  if(navigator.vibrate){navigator.vibrate([400,200]);vibT=setInterval(()=>navigator.vibrate([400,200]),600)}
+}
+function stopSiren(){
+  if(!sirenOn)return;
+  try{osc.stop();lfo.stop()}catch(e){}
+  sirenOn=false;clearInterval(vibT);if(navigator.vibrate)navigator.vibrate(0);
+  $('sirenBtn').textContent='Activar alarma';document.body.classList.remove('siren');
+}
+$('sirenBtn').onclick=()=>sirenOn?stopSiren():startSiren();
+$('exitBtn').onclick=()=>{stopSiren();location.replace('https://www.google.com/search?q=clima')};
 
 renderContact();renderReports();
 try{navigator.permissions&&navigator.permissions.query({name:'geolocation'}).then(p=>{if(p.state==='granted')$('locState').textContent='Permiso activado. No hay seguimiento continuo.';else if(p.state==='denied')$('locState').textContent='Permiso bloqueado en el navegador.'})}catch(e){}
